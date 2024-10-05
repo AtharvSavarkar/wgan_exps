@@ -1,0 +1,17 @@
+{
+  "dataset_npz_path": "DermaMNIST.npz",
+  "exp_name" : "exp1",
+  "subset_selection_algo": "FacilityLocationFunction",
+  "feature_extraction_model": "mv2",
+  "train_test_model": "mv2",
+  "wgan_epochs": 50,
+  "wgan_img_size": 64,
+  "wgan_batch_size": 128,
+  "cnn_epochs": 5,
+  "cnn_batch_size": 128,
+  "cnn_lr": 0.08,
+  "optimizer_weight_decay": 0.005,
+  "cnn_optimizer": "SGD",
+  "budget_list": [200, 400],
+  "subset_selection_budget": 150
+}
