@@ -243,7 +243,7 @@ if __name__ == "__main__":
                 vutils.save_image(fake.data, '{0}/fake_samples_{1}.png'.format(opt.experiment, gen_iterations))
 
         # Saving generator and discriminator model at every 50 epochs
-        if epoch % 50 == 0:
+        if epoch % 500 == 0:
             # do checkpointing
             torch.save(netG.state_dict(), '{0}/netG_epoch_{1}.pth'.format(opt.experiment, epoch))
             torch.save(netD.state_dict(), '{0}/netD_epoch_{1}.pth'.format(opt.experiment, epoch))

@@ -247,94 +247,17 @@ def train_resnet18(train_folder_path, test_folder_path, epochs, batch_size, lear
     return np.max(train_acc), np.max(valid_acc)
 
 
-# Train the model
-def train_model_mv2(model, train_loader, criterion, optimizer, num_epochs, test_loader):
-    model.train()  # Set the model to training mode
-
-    # Lists to keep track of losses and accuracies.
-    train_loss, valid_loss = [], []
-    train_acc, valid_acc = [], []
-
-    max_val_acc = 0
-
-    print('Training MV2 ... \n')
-
-    for epoch in range(num_epochs):
-        model.train()  # Set the model to training mode
-        running_loss = 0.0
-        correct = 0
-        total = 0
-
-        for images, labels in train_loader:
-            optimizer.zero_grad()  # Zero the gradients
-            outputs = model(images)  # Forward pass
-            loss = criterion(outputs, labels)  # Compute the loss
-            loss.backward()  # Backward pass
-            optimizer.step()  # Update weights
-
-            running_loss += loss.item()
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-
-        # Average loss and accuracy for the epoch
-        avg_loss = running_loss / len(train_loader)
-        train_accuracy = 100 * correct / total
-        print(f'Epoch [{epoch + 1}/{num_epochs}], Loss: {avg_loss:.4f}, Train Accuracy: {train_accuracy:.2f}%')
-
-        train_loss.append(avg_loss)
-        train_acc.append(train_accuracy)
-
-        # Evaluate the model after each epoch
-        valid_epoch_acc = evaluate_model_mv2(model, test_loader, num_classes=2)
-
-        valid_acc.append(valid_epoch_acc)
-
-        if valid_epoch_acc > max_val_acc:
-            print('Saving best.pth to working directory ... ')
-            # print(f'Per class test acc for this model is - {per_cls_test_acc}')
-            torch.save(model.state_dict(), 'cnn_models/best.pth')
-            max_val_acc = valid_epoch_acc
-        else:
-            print('Saving last.pth to working directory ... ')
-            torch.save(model.state_dict(), 'cnn_models/last.pth')
-
-    return model, train_loss, train_acc, valid_acc
-
-
-# Evaluate the model
-def evaluate_model_mv2(model, test_loader, num_classes):
-    model.eval()  # Set the model to evaluation mode
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for images, labels in test_loader:
-            outputs = model(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-
-    print(f'Test Accuracy: {100 * correct / total:.2f}%')
-
-    return 100 * correct / total
-
-
-
-
-
 def train_mv2(train_folder_path, test_folder_path, epochs, batch_size, learning_rate, weight_decay, optimizer_str):
-    try:
-        os.mkdir('cnn_models')
-    except FileExistsError:
-        pass
 
-    # Set seed
-    torch.random.manual_seed(42)
-    num_classes = 2
+    train_loader, valid_loader = get_data(train_folder_path, test_folder_path, batch_size=batch_size)
 
-    # Define model based on the argument parser string.
-    print('[INFO]: Training MV2 built from scratch...')
-    model = mobilenet_v2(num_classes=num_classes)
+    # Initialize the MobileNetV2 model
+    model = models.mobilenet_v2(pretrained=True)
+    model.classifier[1] = nn.Linear(model.last_channel, len(train_loader.dataset.classes))  # Adjusting for the number of classes
+    model = model.to(device)
+
+    # Define the loss function
+    criterion = nn.CrossEntropyLoss()
 
     # Optimizer.
     if optimizer_str == 'SGD':
@@ -344,27 +267,86 @@ def train_mv2(train_folder_path, test_folder_path, epochs, batch_size, learning_
     elif optimizer_str == 'RMSProp':
         optimizer = optim.RMSprop(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     else:
-        print('Warning - Using default optimizer - SGD')
-        optimizer = optim.SGD(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        print('Optimizer not defined ...')
+        exit()
 
-    # Loss function.
-    criterion = nn.CrossEntropyLoss()
+    # Lists to keep track of losses and accuracies.
+    train_loss_array, valid_loss_array = [], []
+    train_acc_array, valid_acc_array = [], []
 
-    start_time = time.time()
+    # Training and validation loop
+    for epoch in range(epochs):
+        model.train()
+        running_loss = 0.0
+        correct_train = 0
+        total_train = 0
 
-    train_loader, valid_loader = get_data(train_folder_path, test_folder_path, batch_size=batch_size)
+        # Training phase
+        for inputs, labels in tqdm(train_loader, desc=f"Training Epoch {epoch+1}/{epochs}"):
+            inputs, labels = inputs.to(device), labels.to(device)
 
-    model, train_loss, train_acc, valid_acc = train_model_mv2(model, train_loader, criterion, optimizer, epochs, valid_loader)
+            # Zero the gradients
+            optimizer.zero_grad()
 
-    end_time = time.time()
+            # Forward pass
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
 
-    print('\n\nSummary')
-    print(f'Max training accuracy - {np.round(max(train_acc), 2)}')
-    print(f'Max validation accuracy - {np.round(max(valid_acc), 2)}')
-    print(f'Time required for training model - {np.round((end_time - start_time) / 60, 2)} \n\n')
+            # Backward pass and optimize
+            loss.backward()
+            optimizer.step()
+
+            # Calculate statistics
+            running_loss += loss.item()
+            _, predicted = torch.max(outputs.data, 1)
+            total_train += labels.size(0)
+            correct_train += (predicted == labels).sum().item()
+
+        # Calculate average loss and accuracy for training
+        train_loss = running_loss / len(train_loader)
+        train_accuracy = correct_train / total_train
 
 
-    return np.max(train_acc), np.max(valid_acc)
+        train_loss_array.append(train_loss)
+        train_acc_array.append(train_accuracy)
+
+
+        # Validation phase
+        model.eval()
+        running_val_loss = 0.0
+        correct_val = 0
+        total_val = 0
+
+        with torch.no_grad():
+            for inputs, labels in tqdm(valid_loader, desc=f"Validating Epoch {epoch+1}/{epochs}"):
+                inputs, labels = inputs.to(device), labels.to(device)
+
+                # Forward pass
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+
+                # Calculate statistics
+                running_val_loss += loss.item()
+                _, predicted = torch.max(outputs.data, 1)
+                total_val += labels.size(0)
+                correct_val += (predicted == labels).sum().item()
+
+        # Calculate average loss and accuracy for validation
+        val_loss = running_val_loss / len(valid_loader)
+        val_accuracy = correct_val / total_val
+
+        valid_loss_array.append(val_loss)
+        valid_acc_array.append(val_accuracy)
+
+        # Print statistics for the epoch
+        print(f"Epoch [{epoch+1}/{epochs}]: "
+              f"Train Loss: {train_loss:.4f}, Train Acc: {train_accuracy:.4f}, "
+              f"Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.4f} \n")
+
+    return np.max(train_acc_array), np.max(valid_acc_array)
+
+
+
 
 
 

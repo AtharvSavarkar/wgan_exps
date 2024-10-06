@@ -1,0 +1,17 @@
+{
+  "dataset_npz_path": "DermaMNIST.npz",
+  "exp_name" : "exp1",
+  "subset_selection_algo": "GraphCutFunction",
+  "feature_extraction_model": "mv2",
+  "train_test_model": "mv2",
+  "wgan_epochs": 15000,
+  "wgan_img_size": 64,
+  "wgan_batch_size": 128,
+  "cnn_epochs": 50,
+  "cnn_batch_size": 128,
+  "cnn_lr": 0.08,
+  "optimizer_weight_decay": 0.005,
+  "cnn_optimizer": "SGD",
+  "budget_list": [200, 400, 600, 800, 1000],
+  "subset_selection_budget": 150
+}
